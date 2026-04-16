@@ -1,12 +1,67 @@
 """
-Webhook SENDER — the service that fires webhooks when events happen.
+Webhook SENDER — the EVENT PRODUCER in an event-driven architecture.
 
 Run with: uvicorn sender:app --port 8000 --reload
 
-Key concepts demonstrated:
-  - Managing subscriber URLs
+=== What is event-driven architecture? ===
+
+In traditional request-driven design, the consumer keeps asking:
+  "Did anything happen yet?" over and over (this is called POLLING).
+
+In event-driven design, the producer says:
+  "Something just happened, here you go!" (this is called PUSHING).
+
+The flow is inverted — the consumer doesn't ask, the producer announces.
+
+Every event-driven system has three pieces:
+  1. Event Producer  — detects that something happened and announces it
+  2. Event Channel   — the mechanism that carries the event to consumers
+  3. Event Consumer  — receives the event and reacts to it
+
+=== How this file fits in ===
+
+This file is the EVENT PRODUCER. It:
+  - Lets consumers register their URLs (the subscription model)
+  - Detects when something happens (the /events endpoint is called)
+  - Pushes the event to all registered consumers over HTTP
+
+The key event-driven design decisions here:
+  - The receiver NEVER asks for data — it just waits
+  - The sender DECIDES when to push — triggered by fire_event()
+  - Loose coupling — the sender doesn't know what the receiver does with the event
+  - Subscription model — consumers register interest in specific event types,
+    and the sender filters accordingly
+
+=== Webhooks vs. other event-driven patterns ===
+
+Webhooks (what we built here):
+  Producer POSTs directly to consumer over HTTP. Simple, no extra infrastructure.
+  Downside: if the consumer is down, events can be lost (mitigated by retries).
+
+Message queues (SQS, RabbitMQ):
+  Producer puts events on a queue, consumer pulls at its own pace.
+  The queue buffers events, so nothing is lost if the consumer is down.
+  More reliable, but requires queue infrastructure.
+
+Pub/sub (Kafka, SNS, Redis Pub/Sub):
+  Producer publishes to a topic, multiple consumers subscribe.
+  Like webhooks but with a broker handling fan-out, persistence, and replay.
+  Most scalable, but most complex.
+
+Server-Sent Events / WebSockets:
+  Persistent connections where the server pushes to the client in real time.
+  Used for live UIs (chat, dashboards), not service-to-service communication.
+
+The progression is roughly: webhooks → message queues → pub/sub,
+each adding reliability and complexity. Most real systems use a combination.
+For example, Stripe sends you a webhook, but internally uses Kafka to
+process millions of payment events.
+
+=== Key concepts demonstrated ===
+
+  - Managing subscriber URLs (subscription registry)
   - Signing payloads with HMAC-SHA256 so receivers can verify authenticity
-  - Delivering webhooks with retry logic
+  - Delivering webhooks with retry logic and exponential backoff
   - Async HTTP delivery using httpx
 
 Think of this as a service like GitHub or Stripe — when something happens

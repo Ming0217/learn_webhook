@@ -6,13 +6,34 @@ Run this AFTER starting both servers:
   Terminal 2: uvicorn receiver:app --port 9000 --reload
   Terminal 3: python trigger.py
 
-This script simulates what happens in the real world:
-  1. Your service registers a webhook URL with a provider (like GitHub)
-  2. Something happens on the provider (a push, a payment, etc.)
-  3. The provider sends a webhook to your URL
-  4. Your service receives and processes it
+=== The full event-driven flow this script demonstrates ===
 
-We play both roles here so you can see the entire flow.
+  ┌──────────┐    subscribe     ┌──────────┐
+  │ Receiver │ ───────────────► │  Sender  │   Step 1: Register a webhook URL
+  └──────────┘                  └──────────┘
+
+  ┌──────────┐   HTTP POST      ┌──────────┐
+  │  Sender  │ ───────────────► │ Receiver │   Step 2-3: Event happens → sender
+  └──────────┘  (signed JSON)   └──────────┘   pushes to receiver automatically
+
+  This is the "event-driven" part: the receiver never polls. It registered
+  once, and from then on, events are PUSHED to it the moment they happen.
+
+=== Mapping to event-driven architecture ===
+
+  Event Producer  = sender.py    → detects events and announces them
+  Event Channel   = HTTP POST    → carries the event over the network
+  Event Consumer  = receiver.py  → receives the event and reacts
+
+=== What this script simulates ===
+
+  In the real world:
+    - Step 1 happens once (you configure a webhook URL in GitHub/Stripe settings)
+    - Steps 2-3 happen automatically whenever something occurs (a git push,
+      a payment, etc.)
+    - Steps 4-5 are just us peeking behind the curtain to verify it worked
+
+  We do all of it manually here so you can see every piece.
 """
 
 # httpx is an HTTP client library — we use it to call our sender and receiver APIs.

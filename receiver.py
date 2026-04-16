@@ -1,9 +1,43 @@
 """
-Webhook RECEIVER — the service that listens for incoming webhooks.
+Webhook RECEIVER — the EVENT CONSUMER in an event-driven architecture.
 
 Run with: uvicorn receiver:app --port 9000 --reload
 
-Key concepts demonstrated:
+=== Where this fits in the event-driven model ===
+
+  Event Producer  → sender.py (fires events when something happens)
+  Event Channel   → HTTP POST over the network (with signed payloads)
+  Event Consumer  → THIS FILE (receives events and reacts to them)
+
+This file is the EVENT CONSUMER. The key thing that makes it "event-driven"
+is that this service NEVER asks the sender for data. It just exposes an
+endpoint (/webhook) and waits. When an event arrives, it reacts.
+
+This is the opposite of polling, where you'd write a loop like:
+  while True:
+      response = requests.get("https://sender.com/any-new-events?since=...")
+      process(response)
+      time.sleep(60)
+
+With webhooks, there's no loop, no waiting, no wasted requests. The event
+comes to you the moment it happens.
+
+=== What this consumer does when an event arrives ===
+
+  1. Verifies the HMAC-SHA256 signature (is this really from the sender?)
+  2. Checks for duplicate deliveries using the webhook ID (idempotency)
+  3. Processes the event (your business logic goes here)
+  4. Responds with 200 quickly (so the sender doesn't retry unnecessarily)
+
+=== In production, consumers typically ===
+
+  - Push received events onto a message queue (SQS, RabbitMQ) for async processing
+  - Store events in a database for auditing and replay
+  - Trigger downstream workflows (send emails, update records, etc.)
+  - The key rule: acknowledge fast (return 200), process later
+
+=== Key concepts demonstrated ===
+
   - Receiving POST requests with JSON payloads
   - Verifying HMAC-SHA256 signatures (reject tampered/fake requests)
   - Idempotency (detecting duplicate deliveries)
