@@ -15,7 +15,18 @@ This script simulates what happens in the real world:
 We play both roles here so you can see the entire flow.
 """
 
-# httpx is an HTTP client library — we use it to call our sender and receiver APIs
+# httpx is an HTTP client library — we use it to call our sender and receiver APIs.
+# An HTTP client is code that sends HTTP requests to a server and receives responses —
+# like a browser, but for code instead of humans. Each call follows this pattern:
+#   1. Open a TCP connection to the target server
+#   2. Send an HTTP request (method + URL + headers + body)
+#   3. Wait for the server's response
+#   4. Return the response so we can read it (e.g. resp.json())
+#
+# httpx is one of several HTTP client libraries for Python:
+#   httpx    — used here; supports both sync and async
+#   requests — very popular, sync only
+#   urllib   — built into Python's standard library, more verbose
 import httpx
 # time gives us sleep() to add a small delay between steps
 import time
@@ -27,7 +38,6 @@ RECEIVER = "http://localhost:9000"  # The webhook receiver runs on port 9000
 
 def main():
     # Create an HTTP client with a 10-second timeout for all requests
-    # This is like opening a browser — we'll use it to make HTTP calls
     client = httpx.Client(timeout=10.0)
 
     # ── Step 1: Register the receiver as a webhook subscriber ────────────
@@ -38,7 +48,7 @@ def main():
         f"{SENDER}/subscribers",  # Call the sender's subscribe endpoint
         json={
             # The URL where the sender should POST webhooks to
-            "url": f"{RECEIVER}/webhook",
+            "url": f"{RECEIVER}/webhook",  # <-- this is YOUR webhook URL
             # Only send us these event types (ignore everything else)
             "events": ["order.created", "order.shipped"],
         },
