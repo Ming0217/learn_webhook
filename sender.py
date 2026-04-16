@@ -115,9 +115,12 @@ async def deliver_webhook(url: str, body: dict, max_retries: int = 3):
         "X-Webhook-Timestamp": body["timestamp"],     # When the event was created (replay attack prevention)
     }
 
-    # Track which attempt we're on and the last error we saw
+    # Track which attempt we're on and the last error we saw.
+    # last_log_entry tracks whether the last attempt was logged inside the loop
+    # (HTTP response received) or not (network exception — nothing logged yet).
     attempt = 0
     last_error = None
+    last_log_entry = None  # Set when an HTTP response is received (even non-2xx)
 
     # Create an async HTTP client with a 10-second timeout per request
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -140,6 +143,7 @@ async def deliver_webhook(url: str, body: dict, max_retries: int = 3):
                 }
                 # Add to our delivery log for debugging
                 delivery_log.append(log_entry)
+                last_log_entry = log_entry  # Remember we already logged this attempt
 
                 # If we got a 2xx response, delivery succeeded — we're done
                 if log_entry["success"]:
@@ -150,8 +154,10 @@ async def deliver_webhook(url: str, body: dict, max_retries: int = 3):
 
             except httpx.RequestError as exc:
                 # Network error (connection refused, timeout, DNS failure, etc.)
-                # The receiver might be down — we'll retry
+                # The receiver might be down — we'll retry.
+                # Nothing is logged here; last_log_entry stays None for this attempt.
                 last_error = str(exc)
+                last_log_entry = None  # This attempt has no log entry yet
 
             # Move to the next attempt
             attempt += 1
@@ -166,17 +172,24 @@ async def deliver_webhook(url: str, body: dict, max_retries: int = 3):
                 # asyncio.sleep() instead. This is fine for learning.
                 time.sleep(backoff)
 
-    # If we get here, all retries are exhausted — delivery failed
-    fail_entry = {
-        "webhook_id": body["id"],
-        "url": str(url),
-        "status_code": None,                                # No successful HTTP response
-        "attempt": attempt,                                  # How many times we tried
-        "success": False,                                    # Mark as failed
-        "error": last_error,                                 # What went wrong
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-    delivery_log.append(fail_entry)
+    # If we get here, all retries are exhausted — delivery failed.
+    # Only log a final failure entry if the last attempt was a network exception
+    # (no HTTP response was received, so nothing was logged inside the loop).
+    # If the last attempt got an HTTP error (like 401), it was already logged above.
+    if last_log_entry is None:
+        fail_entry = {
+            "webhook_id": body["id"],
+            "url": str(url),
+            "status_code": None,                                # No HTTP response received
+            "attempt": attempt,                                  # How many times we tried
+            "success": False,                                    # Mark as failed
+            "error": last_error,                                 # What went wrong
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        delivery_log.append(fail_entry)
+        return fail_entry
+
+    return last_log_entry
     return fail_entry
 
 
